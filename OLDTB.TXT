@@ -1,0 +1,53 @@
+
+;*****************************************************************************
+;
+;       TB              15/10/90
+;
+;       TIMER INTERRUPT handler.
+;       Check SLICEnumber, transmit data, adjust SLICEnumber
+;       If last SLICE then disable TB NMI and enable FLAG NMI.
+;
+;       This routine also decrements the DELAY10MS counter every
+;       10 ms.
+;
+;       input:          none
+;       output:         none
+;       regs affected:  all
+;
+;*****************************************************************************
+
+TB              LDA SLICECNT           
+                CMP #ZEROCROSS          ;IS THIS THE POS HALF OF PHASE?
+                BCC TB1                 ;YES -> GO ON
+                SBC #HALFPHASE          ;ADJUST FOR NEG HALF OF PHASE
+                CMP #ZEROCROSS          ;IS THIS THE NEG HALF OF PHASE?
+                BCC TB1                 ;YES -> GO ON
+                DEC DELAY10MS           ;ZERO-CROSSING -> ADJUST DELAY CNT
+                JMP TB3                 ;READY 
+
+;               SEND SERIAL DATA
+
+TB1             ASL A                   ;A=ADJUSTED SLICECNT
+                ASL A                   ;A=A*4
+                TAX                     ;X=POINTER DO DATA IN LAMPBITMAP
+                LDY #4                  ;Y=LOOPCOUNTER
+                SEC                     ;DON'T WAIT FOR SDR EMPTY
+TB2             LDA LAMPBITMAP,X        ;GET DATA TO TRANSMIT
+                JSR DATOUT              ;TRANSMIT IT
+                INX                     ;POINT TO NEXT DATAFIELD
+                DEY                     ;ALL DONE?
+                BNE TB2                 ;NO -> GO LOOP
+
+TB3             LDA SLICECNT          
+                CMP #NROFSLICES-1       ;WAS THIS THE LAST SLICE?
+                BNE TBEXIT              ;NO -> WE ARE READY
+                LDA #STOPTB             ;YES-> STOP GENERATING TIMER B NMI'S
+                STA CRB                 ;SWITCH OFF TIMER B
+                LDA #DISABLETB 
+                STA ICR                 ;DON'T ALLOW TB NMI'S
+                LDA #ENABLEFLAG
+                STA ICR                 ;ENABLE FLAG NMI'S
+
+TBEXIT          INC SLICECNT            ;ADJUST SLICECNT FOR NEXT SLICE
+                RTS
+

@@ -1,0 +1,234 @@
+;       ADRESSES OF CIA#2 REGISTERS
+
+CIA2BASE        EQU $DD00               ;BASE ADRESS OF CIA#2 
+
+PRB2            EQU CIA2BASE+1          ;PERIPHERAL DATA REG B
+DDRB2           EQU CIA2BASE+3          ;DATA DIRECTION REG B
+TALO2           EQU CIA2BASE+4          ;TIMER A LOW REGISTER
+TAHI2           EQU CIA2BASE+5          ;TIMER A HIGH REGISTER
+TBLO2           EQU CIA2BASE+6          ;TIMER B LOW REGISTER
+TBHI2           EQU CIA2BASE+7          ;TIMER B HIGH REGISTER
+SDR2            EQU CIA2BASE+$0C        ;SERIAL DATA REGISTER
+ICR2            EQU CIA2BASE+$0D        ;INTERRUPT CONTROL REGISTER
+CRA2            EQU CIA2BASE+$0E        ;CONTROL REG A
+CRB2            EQU CIA2BASE+$0F        ;CONTROL REG B
+
+;               VISUALIZE DATA INPUT
+
+
+ADCONV          EQU $DF00
+MOBX            EQU $D000
+MOBY            EQU $D001
+MOBCOLOR        EQU $D027
+MOBMCOL0        EQU $D025
+MOBMCOL1        EQU $D026
+MOBMCOLSEL      EQU $D01C
+MOBDISPL        EQU $D015
+MOBPTR          EQU $07F8
+MOBXEXP         EQU $D01D
+MOBYEXP         EQU $D017
+
+
+                ORG $3000
+
+MOBLEVEL0       RMB 64
+MOBLEVEL1       RMB 64
+MOBLEVEL2       RMB 64
+MOBLEVEL3       RMB 64
+MOBLEVEL4       RMB 64
+MOBLEVEL5       RMB 64
+
+                ORG $8000
+
+INIT            LDA #100
+                STA MOBY
+                STA MOBX
+
+                LDX #63
+                LDA #0
+CLEARMOBS       STA MOBLEVEL0,X
+                STA MOBLEVEL1,X
+                STA MOBLEVEL2,X
+                STA MOBLEVEL3,X
+                STA MOBLEVEL4,X
+                STA MOBLEVEL5,X
+                DEX
+                BPL CLEARMOBS
+
+                LDX #2
+
+DEFMOBS         LDA LEVEL0,X 
+                STA MOBLEVEL0,X
+                STA MOBLEVEL0+6,X
+
+                LDA LEVEL1,X 
+                STA MOBLEVEL1,X
+                STA MOBLEVEL1+6,X
+
+                LDA LEVEL2,X 
+                STA MOBLEVEL2,X
+                STA MOBLEVEL2+6,X
+
+                LDA LEVEL3,X 
+                STA MOBLEVEL3,X
+                STA MOBLEVEL3+6,X
+
+                LDA LEVEL4,X 
+                STA MOBLEVEL4,X
+                STA MOBLEVEL4+6,X
+
+                LDA LEVEL5,X 
+                STA MOBLEVEL5,X
+                STA MOBLEVEL5+6,X
+
+                DEX
+                BPL DEFMOBS
+
+
+                LDA #1
+                STA MOBCOLOR            ;WHITE
+                STA MOBMCOL1
+                LDA #15
+                STA MOBMCOL0            ;LIGHT GRAY
+
+                LDA #1
+                STA MOBDISPL            ;MAKE VISIBLE
+                STA MOBXEXP             ;EXPAND X
+                STA MOBYEXP             ;EXPAND Y
+                STA MOBMCOLSEL          ;MULTI COLOR MODE
+
+                JSR INITADC
+
+
+LOOP            JSR READADC
+                TAX
+
+;                STA ADCONV              ;STAR CONV
+;WAIT            LDA ADCONV+1            ;GET STATUS
+;                BMI WAIT                ;CONV NOT READY
+;                LDX ADCONV              ;GET RESULT
+
+
+                LDA ADTOVU,X            ;GET VU
+                TAX
+                LDA MOBDEF,X
+                STA MOBPTR              ;PLACE SPRITE
+
+                JMP LOOP             
+
+
+MOBDEF          BYTE MOBLEVEL0/64
+                BYTE MOBLEVEL1/64
+                BYTE MOBLEVEL2/64
+                BYTE MOBLEVEL3/64
+                BYTE MOBLEVEL4/64
+                BYTE MOBLEVEL5/64
+
+
+LEVEL0          BYTE %00000000,%00000000,%00000000
+LEVEL1          BYTE %01000000,%00000000,%00000000
+LEVEL2          BYTE %01000100,%00000000,%00000000
+LEVEL3          BYTE %01000100,%01000000,%00000000
+LEVEL4          BYTE %01000100,%01000100,%00000000
+LEVEL5          BYTE %01000100,%01000100,%11000000
+
+
+INITADC         LDA DDRB2
+                AND #%01111111          ;SELECT INPUTS
+                ORA #%00000110          ;SELECT OUTPUTS
+                STA DDRB2
+
+                LDA PRB2
+                AND #%11111101          ;CK = 0
+                ORA #%00000100          ;CS = 1
+                STA PRB2
+
+                RTS
+
+
+READADC         LDA PRB2
+                AND #%11111001          ;CK = 0, CS = 0
+                STA PRB2                ;SELECT THE ADC
+
+                LDA #0                  ;CLEAR DATA
+                LDY #8                  ;DO 8 BITS
+READ1           LDX PRB2                ;GET DATA IN BIT 7
+                CLC                     ;ASSUME DATABIT=0
+                BPL READ0               ;DATABIT=0 -> SKIP
+                SEC                     ;DATABIT=1
+READ0           ROL A                   ;SHIFT IN DATABIT
+
+;               NOW MAKE CLOCK TICK
+
+                PHA                     ;SAVE DATA
+                LDA PRB2
+                ORA #%00000010          ;CK = 1
+                STA PRB2
+                AND #%11111101          ;CK = 0
+                STA PRB2
+                PLA                     ;RETRIEVE DATA
+
+                DEY                     ;ALL BITS DONE?
+                BNE READ1               ;NO -> DO NEXT BIT
+
+;               NOW UNSELECT THE ADC
+
+                PHA                     ;SAVE DATA
+                LDA PRB2
+                ORA #%00000100          ;CS = 1
+                STA PRB2
+                PLA                     ;RETRIEVE DATA
+
+                RTS
+
+ADTOVU          BYTE 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0    ;0  ..15
+                BYTE 0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,1    ;16 ..31
+                BYTE 2,2,2,3,3,3,3,3,3,3,4,4,4,4,4,4    ;32 ..47
+                BYTE 4,4,4,4,4,4,4,4,5,5,5,5,5,5,5,5    ;48 ..63
+                BYTE 5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5    ;64 ..79
+                BYTE 5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5    ;80 ..95
+                BYTE 5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5    ;96 ..111
+                BYTE 5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5    ;112..127
+                BYTE 5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5    ;128..143
+                BYTE 5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5    ;144..159
+                BYTE 5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5    ;160..175
+                BYTE 5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5    ;176..191
+                BYTE 5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5    ;192..207
+                BYTE 5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5    ;208..223
+                BYTE 5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5    ;224..239
+                BYTE 5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5    ;240..255
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

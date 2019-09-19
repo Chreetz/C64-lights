@@ -1,0 +1,55 @@
+
+
+;*****************************************************************************
+;
+;       DEMO PROGRAM -- 3 LAMP KNIGHT RIDER 
+;
+;*****************************************************************************
+        
+
+SAMPLEDAT1      BYTE 0,0,0,0,0,0,0,0
+                BYTE 0,0,0,0,0,0,$05,$00
+
+SAMPLEDAT2      BYTE 0,0,0,0,0,0,0,0
+                BYTE 0,0,0,0,0,0,$00,$04
+
+SAMPLEDAT3      BYTE 0,0,0,0,0,0,0,0
+                BYTE 0,0,0,0,0,0,$00,$45
+
+SAMPLEDAT4      BYTE 0,0,0,0,0,0,0,0
+                BYTE 0,0,0,0,0,0,$04,$50
+
+SPEED           EQU 25
+
+
+START           JSR INIT
+MAINLOOP        LDX #}SAMPLEDAT1
+                LDY #{SAMPLEDAT1
+                STX LMPPTR
+                STY LMPPTR+1
+                JSR SETNEW
+                LDA #SPEED 
+                JSR DELAYAMS
+                LDX #}SAMPLEDAT2
+                LDY #{SAMPLEDAT2
+                STX LMPPTR
+                STY LMPPTR+1
+                JSR SETNEW
+                LDA #SPEED     
+                JSR DELAYAMS
+                LDX #}SAMPLEDAT3
+                LDY #{SAMPLEDAT3
+                STX LMPPTR
+                STY LMPPTR+1
+                JSR SETNEW
+                LDA #SPEED     
+                JSR DELAYAMS
+                LDX #}SAMPLEDAT4
+                LDY #{SAMPLEDAT4
+                STX LMPPTR
+                STY LMPPTR+1
+                JSR SETNEW
+                LDA #SPEED     
+                JSR DELAYAMS
+                JMP MAINLOOP            ;RUN FOREVER
+

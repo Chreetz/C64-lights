@@ -1,0 +1,1448 @@
+
+;*****************************************************************************
+;
+;       LAMPJES 
+;
+;*****************************************************************************
+
+
+;       ADRESSES OF CIA#1 REGISTERS
+                       
+CIA1BASE        EQU $DC00               ;BASE ADRESS OF CIA#1 
+
+PRB1            EQU CIA1BASE+1          ;PERIPHERAL DATA REG B
+DDRB1           EQU CIA1BASE+3          ;DATA DIRECTION REG B
+TALO1           EQU CIA1BASE+4          ;TIMER A LOW REGISTER
+TAHI1           EQU CIA1BASE+5          ;TIMER A HIGH REGISTER
+TBLO1           EQU CIA1BASE+6          ;TIMER B LOW REGISTER
+TBHI1           EQU CIA1BASE+7          ;TIMER B HIGH REGISTER
+SDR1            EQU CIA1BASE+$0C        ;SERIAL DATA REGISTER
+ICR1            EQU CIA1BASE+$0D        ;INTERRUPT CONTROL REGISTER
+CRA1            EQU CIA1BASE+$0E        ;CONTROL REG A
+CRB1            EQU CIA1BASE+$0F        ;CONTROL REG B
+
+;       ADRESSES OF CIA#2 REGISTERS
+
+CIA2BASE        EQU $DD00               ;BASE ADRESS OF CIA#2 
+
+PRB2            EQU CIA2BASE+1          ;PERIPHERAL DATA REG B
+DDRB2           EQU CIA2BASE+3          ;DATA DIRECTION REG B
+TALO2           EQU CIA2BASE+4          ;TIMER A LOW REGISTER
+TAHI2           EQU CIA2BASE+5          ;TIMER A HIGH REGISTER
+TBLO2           EQU CIA2BASE+6          ;TIMER B LOW REGISTER
+TBHI2           EQU CIA2BASE+7          ;TIMER B HIGH REGISTER
+SDR2            EQU CIA2BASE+$0C        ;SERIAL DATA REGISTER
+ICR2            EQU CIA2BASE+$0D        ;INTERRUPT CONTROL REGISTER
+CRA2            EQU CIA2BASE+$0E        ;CONTROL REG A
+CRB2            EQU CIA2BASE+$0F        ;CONTROL REG B
+
+;       BITMASKS TO CONTROL THE CIA
+
+STARTTB         EQU %00010001           ;BITMASK TO START TIMER B
+STOPTB          EQU 0                   ;BITMASK TO STOP TIMER B
+ENABLETB        EQU %10000010           ;BITMASK TO ENABLE TIMER B NMI'S
+DISABLETB       EQU %00000010           ;BITMASK TO DISABLE TIMER B NMI'S
+ENABLEFLAG      EQU %10010000           ;BITMASK TO ENABLE FLAG NMI'S
+DISABLEFLAG     EQU %00010000           ;BITMASK TO DISABLE FLAG NMI'S
+TBNMI           EQU %00000010           ;BITMASK TO CHECK FOR TIMER B NMI
+FLAGNMI         EQU %00010000           ;BITMASK TO CHECK FOR FLAG NMI
+
+;       CBM64 ADRESSES
+
+NMIVEC          EQU $0318               ;ADRESS OF NMI VECTOR
+SRQVEC          EQU $0314               ;ADRESS OF SRQ VECTOR
+SCNKEY          EQU $FF9F               ;SCAN KEYBOARD
+GETIN           EQU $FFE4               ;GET CHAR FROM KEYBRD BUFF
+CHROUT          EQU $FFD2               ;OUPUT CHARACTER
+PLOT            EQU $FFF0               ;READ/SET CURSOR POS
+IOINIT          EQU $FF84               ;INITIALIZE I/O
+SCREEN          EQU  1024               ;START OF SCREEN
+
+;       PROGRAM CONSTANTS
+
+NROFSLICES      EQU 20                  ;# SLICES IN WHICH A PHASE IS DEVIDED
+SLICETIME       EQU $03D9   ;(1 MS)     ;DURATION OF A SLICE (IN PHI2 TICKS) 
+RATE            EQU $0004               ;SERIAL TRANSMISSION RATE
+NROFLAMPS       EQU 32                  ;NUMBER OF LAMPS
+NROFDATABYTES   EQU NROFLAMPS/2         ;NUMBER OF DATABYTES
+BITMAPSIZE      EQU 6*4                 ;SIZE OF LAMPDATA BITMAP CODES 0 THRU 5
+SRQTIME         EQU 56000               ;55 MS (IBM PC SPEED)
+NROFPROGS       EQU 7                   ;NUMER OF PROGRAMS
+
+;
+;       Memory map  
+;
+
+FREEZEROPG      EQU $A3                 ;START OF SOME FREE ZERO PAGE
+PROGRAMSEG      EQU $8000               ;PROGRAM SEGMENT START ADRESS
+DATASEG         EQU $6000               ;DATA SEGMENT START ADRESS
+
+;
+;       Zero-page variables and pointers
+;
+
+                ORG FREEZEROPG
+
+LMPPTR          RMB 2                   ;POINTER TO LAMPDATA USED BY SETLMP
+SCRNPTR         RMB 2                   ;POINTER TO SCREENPOSITION (SCREENSIM)
+SLICECNT        RMB 1                   ;SLICE COUNTER
+TEMPDATOUT      RMB 1                   ;TEMPORARY DATA DATOUT ROUTINE
+DELAYCNT        RMB 1                   ;DECREMENTED EVERY 20 MS.
+VUVALUE         RMB 1                   ;VU VALUE
+TMPPTR          RMB 2                   ;TEMPORARY PTR
+;
+;       Tables and non-zeropage variables
+;
+
+                ORG DATASEG
+
+CURRENTBMP      RMB BITMAPSIZE          ;LAMP BITMAP
+NEXTBMP         RMB BITMAPSIZE          ;NEW LAMPBITMAP (TEPORARY)
+LAMPCODES       RMB NROFLAMPS           ;LAMP CODES 
+CURSTART        RMB 2                   ;START OF CURRENT PROG
+CURPROG         RMB 1                   ;CURRENT PROGRAM NR
+CURBCOL         RMB 1                   ;CURRENT BACKGROUD COLOR
+NULL            RMB 1                   ;DUMMY DUMP
+
+;               VISUALIZE DATA INPUT
+
+
+ADCONV          EQU $DF00               ;ADRESS OF A/D CONVERTER
+
+MOBX            EQU $D000               ;MOB X POSITION (VU)
+MOBY            EQU $D001               ;MOB Y POSITION
+MOBCOLOR        EQU $D027               ;MOB COLOR
+MOBMCOL0        EQU $D025               ;MOB MULTICOLOR 0
+MOBMCOL1        EQU $D026               ;MOB MULTICOLOR 1
+MOBMCOLSEL      EQU $D01C               ;MOB MULTICOLOR SELECT
+MOBDISPL        EQU $D015               ;MOB ON DISPLAY 
+MOBPTR          EQU $07F8               ;MOB DATA POINTER
+MOBXEXP         EQU $D01D               ;MOB X EXPAND
+MOBYEXP         EQU $D017               ;MOB Y EXPAND
+
+SCREENCOL       EQU 53281               ;SCREEN COLOR
+BORDERCOL       EQU 53280               ;SCREEN BORDER COLOR
+BACKGR1         EQU 53282               ;BACKGROUND COLOR 1
+BACKGR2         EQU 53283               ;BACKGROUND COLOR 2
+BACKGR3         EQU 53284               ;BACKGROUND COLOR 3
+VICCTRL         EQU $D011               ;VIDEO CONTROL REG
+VICMEMCTRL      EQU $D018               ;VIDEO MEMORY CONTROL REG
+
+CHARROM         EQU $D800               ;START OF LOWER CASE CHAR SET
+CHARSETMSK      EQU %00001100           ;MASK TO SET VICMEMCTRL TO CHARSET
+
+VUCHAR          EQU 58                  
+
+HILIGHT         EQU %10000000
+LOLIGHT         EQU %01000000
+
+
+BLACK           EQU 0
+GREY0           EQU 11
+GREY1           EQU 12
+GREY2           EQU 15
+WHITE           EQU 1
+
+                ORG $3000
+
+CHARSET         RMB 512                 ;RAM CHAR SET
+
+MOBLEVEL0       RMB 64                  ;DATA OF MOB  VU=0
+MOBLEVEL1       RMB 64                  ;DATA OF MOB  VU=1
+MOBLEVEL2       RMB 64                  ;DATA OF MOB  VU=2
+MOBLEVEL3       RMB 64                  ;DATA OF MOB  VU=3
+MOBLEVEL4       RMB 64                  ;DATA OF MOB  VU=4
+MOBLEVEL5       RMB 64                  ;DATA OF MOB  VU=5
+
+;
+;       Program
+;
+
+                ORG PROGRAMSEG
+
+;       JUMPTABLE TO AVAILABLE ROUTINES
+
+;                WORD START
+;                WORD START
+;                BYTE $C3,$C2,$CD,$38,$30
+
+                JMP START
+                JMP INITNMI             ;INITIALIZE THE LAMPS DRIVER
+                JMP SETLAMP
+
+;*****************************************************************************
+;
+;       INITSRQ
+;
+;       Initialize the SRQ handler
+;
+;*****************************************************************************
+
+INITSRQ         SEI                     ;DISABLE INT
+
+                LDA #%01111111
+                STA ICR1                ;DISABLE SRQ'S FROM CIA
+                                                        
+                LDX #}NEWSRQ
+                LDY #{NEWSRQ
+                STX SRQVEC
+                STY SRQVEC+1            ;INITIALIZE THE SRQ VECTOR
+
+                LDX #}SRQTIME
+                LDY #{SRQTIME           ;TIMER A CONTROLS THE SPEED
+                STX TALO1               ;OF SRQ INTERRUPTS 
+                STY TAHI1               ;
+                LDA #%11010001          ;CONTINUOUS MODE
+                STA CRA1                ;START TIMER A
+
+                LDA #%10000001           
+                STA ICR1                ;SRQ ON TIMER A
+
+                CLI                     ;ALLOW INT'S
+                RTS
+
+
+
+;*****************************************************************************
+;
+;       NEWSRQ
+;
+;       The Kernal saves the registers on stack before
+;       passing control to the SRQ handler.
+;       This routine should restore the registers!
+;
+;*****************************************************************************
+
+
+NEWSRQ          LDA ICR1                ;RESET INTERRUPT
+
+                JSR SCNKEY              ;SCAN KEYBOARD
+                JSR GETIN               ;GET KEY
+                CMP #0                  ;KEY PRESSED?
+                BEQ SRQEND              ;NO -> READY
+
+;       SOME KEY PRESSED
+
+                SEC                     ;PREPARE FOR SBC
+                SBC #"A"                ;GET PROGNR IN A
+                BMI SRQEND              ;ILLEGAL PROGNR -> READY
+
+                CMP #NROFPROGS          ;NR OF PROGS
+                BPL SRQEND              ;ILLEGAL NR -> READY
+
+                CMP CURPROG             ;IS IT THE RUNNING PROG?
+                BEQ SRQEND              ;YES -> EXIT
+                PHA                     ;SAVE NEW PROGNR
+                LDA #LOLIGHT
+                STA CURBCOL             ;SET LOLIGHT
+                LDA CURPROG             ;GET CURRENT PROGNR
+                TAX
+                JSR PRDISP              ;WRITE IT (LOLOGHTED)
+
+                PLA                     ;GET NEW PROGNR
+                STA CURPROG             ;NO -> UPDATE CURPROG
+
+                ASL A                   ;A = A * 2
+                TAX                     ;X = INDEX
+                LDA PRSTART,X           ;FETCH STARTADRESS
+                STA CURSTART
+                LDA PRSTART+1,X         ;AND BUILD POINTER
+                STA CURSTART+1
+
+                LDA #HILIGHT
+                STA CURBCOL
+                LDA CURPROG
+                TAX
+                JSR PRDISP
+
+
+                LDX #$FF                ;INITIALIZE STACK
+                TXS
+
+                JMP (CURSTART)          ;START PROGRAM
+
+
+SRQEND          PLA                     ;
+                TAY                     ;RESTORE Y REG
+                PLA                     ;
+                TAX                     ;RESTORE X REG
+                PLA                     ;RESORE ACC
+
+                RTI                     ;INTERRUP READY
+
+
+PRSTART         WORD PRSTART0,PRSTART1,PRSTART2,PRSTART3,PRSTART4
+                WORD PRSTART5,PRSTART7
+
+PRNAM           FCS "A DIM   "
+                FCS "B DARK  "
+                FCS "C RUN   "
+                FCS "D SOFT  "
+                FCS "E FLASH "
+                FCS "F BEAT  "
+                FCS "G VU    "
+
+PRDISP          TXA
+                PHA                     ;SAVE PROGNR
+
+                LDA #}SCREEN+160
+                STA TMPPTR
+                LDA #{SCREEN+160        ;TMP = PTR TO FIRST SCREEN
+                STA TMPPTR+1            ;LINE OF PROG LIST
+
+                PLA                     ;GET PROGNR
+                PHA                     ;LEAVE ON STACK
+                TAX                     ;COUNT LINES IN X
+PR1             BEQ PR0                 ;READY
+                LDA #40                 ;CHARS/LINE
+                CLC                     ;MOVE PTR TO
+                ADC TMPPTR              ;START OF NEXT LINE
+                STA TMPPTR
+                LDA #0
+                ADC TMPPTR+1
+                STA TMPPTR+1
+                DEX                     ;UPDATE COUNT
+                JMP PR1
+
+PR0             PLA                     ;GET PROGNR
+                PHA                     ;LEAVE ON STACK
+                ASL A
+                ASL A
+                ASL A                   ;A = A * 8
+                TAX                     ;MAKE X INDEX
+                LDY #0                  ;START IN COL 0
+
+WRNAM           LDA PRNAM,X             ;GET CHAR
+                AND #%00111111          ;STRIP BACKGROUD COL
+                ORA CURBCOL             ;ADD IN BACKGROUND COLOR
+                STA (TMPPTR),Y          ;PRINT IT
+                INX                     ;POINT TO NEXT CHAR OF NAME
+                INY                     ;POINT TO NEXT SCREEN LOCATION
+                CPY #8                  ;ALL DONE?
+                BNE WRNAM               ;NO -> LOOP
+
+                PLA
+                TAX                     ;RESTORE PROGNR IN X
+
+                RTS
+
+
+
+
+
+
+;*****************************************************************************
+;
+;      INITNMI          15/10/90
+;
+;       Initialize the lampsteering interrupt system.
+;
+;       There are 3 different NMI possible:
+;       FLAG, TB and RESTORE.
+;
+;       The RESTORE interrupt is caused by pressing the <restore>
+;       key. This interrupt is ignored.
+;
+;       The FLAG and TB interrups both come from CIA 2. 
+;       The FLAG is generated by a high to low transition on the
+;       FLAG input pin. This transition is generated by hardware on
+;       the first zero-cross of a full phase in the main power
+;       supply. It comes approx every 20ms. (50Hz)
+;       The TB interrupt is generated by the TIMER B section of 
+;       the CIA. Every TB interrupt indicates the start of a new
+;       timeSLICE. Every TB and FLAG interrupt, data is transmitted.
+;
+;       The FLAG interrupt disables itself and enables the TB.
+;       The last TB interrupt disables TB intr's and enables FLAG.
+;       
+;       input:          none
+;       output:         The old NMI is taken over by the new one.
+;                       FLAG NMI enabled, timers A and B set.
+;                       Hardware switched from RS232 to power-sync.
+;       regs affected:  all
+;
+;*****************************************************************************
+
+INITNMI         LDA #%01111111
+                STA ICR2                ;DISABLE NMI'S
+                                                        
+                LDX #}NEWNMI
+                LDY #{NEWNMI
+                STX NMIVEC
+                STY NMIVEC+1            ;INITIALIZE THE NMI VECTOR
+
+                LDX #}RATE
+                LDY #{RATE              ;TIMER A CONTROLS THE SPEED
+                STX TALO2               ;OF THE SERIAL PORT
+                STY TAHI2               ;SET RATE OF SERIAL TRANSMISSION
+                LDA #%11010001          ;CONTINUOUS MODE
+                STA CRA2                ;START TIMER A
+
+                LDX #}SLICETIME
+                LDY #{SLICETIME
+                STX TBLO2
+                STY TBHI2               ;SET DURATION OF ONE SLICE
+                LDA #0
+                STA CRB2                ;RESET TIMER B
+
+                LDA #%00100000
+                STA DDRB2               ;PBJ OF USERPORT TO OUTPUT
+                LDA PRB2
+                AND #%11011111
+                STA PRB2                ;PBJ LOW TO ENABLE SYNC AT FLAG INPUT
+
+                LDA #ENABLEFLAG          
+                STA ICR2                ;ENABLE FLAG NMI
+
+                RTS
+
+
+;*****************************************************************************
+;
+;       INITVDU          15/10/90
+;
+;       Initialize the display settings.
+;       Create ram charset and MOB data.
+;       This routine banks in the character ROM. The
+;       processor cannot adress the I/O while copying the char set.
+;       If at that time an interrupt occurs the system will crash.
+;       This routine should therefore be called before initializing
+;       the interrupts.
+;
+;       regs affected:  all
+;
+;*****************************************************************************
+
+INITVDU         JSR IOINIT              ;INITIALIZE I/O
+
+;       CLEAR SCREEN (FILL WITH SPACES)
+
+                LDX #}SCREEN
+                LDY #{SCREEN
+                STX TMPPTR
+                STY TMPPTR+1            ;POINT TO SCREEN
+                LDA #32                 ;WHITE SPACE
+                LDY #0
+                LDX #4                  ;SCREEN 4 PAGES WIDE
+IN0             STA (TMPPTR),Y          ;CLEAR A BYTE
+                INY 
+                BNE IN0
+                INC TMPPTR+1            ;POINT TO NEXT PAGE
+                DEX                     ;ALL PAGES DONE?
+                BNE IN0                 ;NO -> DO NEXT
+
+;       MAKE ALL CHARACTERS ON SCREEN WHITE
+
+                LDA #$D8                ;FIRST PAGE OF COLOR RAM
+                STA TMPPTR+1
+                LDA #WHITE
+                LDY #0
+                LDX #4
+IN1             STA (TMPPTR),Y          ;MAKE A CHAR WHITE
+                INY 
+                BNE IN1
+                INC TMPPTR+1            ;POINT TO NEXT PAGE
+                DEX                     ;ALL PAGES DONE?
+                BNE IN1                 ;NO -> DO NEXT
+
+                LDX #63                 ;DEFINE VU METER MOBS
+                LDA #0                  ;FIRST CLEAR ALL BYTES
+CLEARMOBS       STA MOBLEVEL0,X
+                STA MOBLEVEL1,X
+                STA MOBLEVEL2,X
+                STA MOBLEVEL3,X
+                STA MOBLEVEL4,X
+                STA MOBLEVEL5,X
+                DEX
+                BPL CLEARMOBS
+
+                LDX #2
+                                        
+DEFMOBS         LDA LEVEL0,X            ;NOW DEFINE MOBS
+                STA MOBLEVEL0,X
+                STA MOBLEVEL0+6,X
+
+                LDA LEVEL1,X 
+                STA MOBLEVEL1,X
+                STA MOBLEVEL1+6,X
+
+                LDA LEVEL2,X 
+                STA MOBLEVEL2,X
+                STA MOBLEVEL2+6,X
+
+                LDA LEVEL3,X 
+                STA MOBLEVEL3,X
+                STA MOBLEVEL3+6,X
+
+                LDA LEVEL4,X 
+                STA MOBLEVEL4,X
+                STA MOBLEVEL4+6,X
+
+                LDA LEVEL5,X 
+                STA MOBLEVEL5,X
+                STA MOBLEVEL5+6,X
+
+                DEX
+                BPL DEFMOBS
+
+                LDA #BLACK
+                STA SCREENCOL
+                STA BORDERCOL           ;SCREEN BLACK
+
+                LDA #GREY1
+                STA MOBCOLOR         
+                LDA #WHITE
+                STA MOBMCOL1         
+                LDA #WHITE
+                STA MOBMCOL0  
+
+                LDA #GREY0
+                STA BACKGR1
+                LDA #GREY1
+                STA BACKGR2
+                LDA #WHITE
+                STA BACKGR3
+
+
+;       NOW COPY FIRST 64 CHAR'S OF LOWER CASE CHAR SET
+
+                SEI                     ;DISABLE INT
+
+                LDA 1                   ;GET MEMORY MAP
+                AND #%11111011          ;BANK IN CHAR ROM
+                STA 1
+
+                LDX #0                  ;NOW COPY CHAR SET
+CHARCOPY        LDA CHARROM,X
+                STA CHARSET,X
+                LDA CHARROM+$100,X
+                STA CHARSET+$100,X
+                INX
+                BNE CHARCOPY
+
+                LDA 1
+                ORA #%00000100          ;BANK IN I/O
+                STA 1
+
+                CLI                     ;ALLOW INT
+
+                LDX #7                  ;CREATE COPYRIGHT CHARACTER
+COPYR_LP        LDA CH_COPYR,X
+                STA CHARSET,X
+                DEX
+                BPL COPYR_LP
+
+                LDX #47                 ;CREATE LAMP CHARACTERS
+VU_LP           LDA CH_VU0,X
+                STA CHARSET+VUCHAR*8,X
+                DEX
+                BPL VU_LP
+
+                LDA VICMEMCTRL
+                AND #%11110001
+                ORA #CHARSETMSK
+                STA VICMEMCTRL          ;SET RAM CHAR SET
+
+                LDA VICCTRL
+                ORA #%01000000
+                STA VICCTRL             ;SET EXTENDED BACKGROUND MODE
+        
+                LDA #51                 ;POSITION VU METER MOB
+                STA MOBY
+                LDA #184
+                STA MOBX
+
+                LDA #1
+                STA MOBDISPL            ;MAKE MOB VISIBLE
+                STA MOBXEXP             ;EXPAND X
+                STA MOBYEXP             ;EXPAND Y
+                STA MOBMCOLSEL          ;SET MULTI COLOR MODE
+
+                LDX #39                 ;WRITE HEADER
+HEAD0           LDA HEADER,X
+                AND #63                 ;ASCII TO CBM
+                ORA #LOLIGHT            ;SET BACKGROUND COLOR 1
+                STA SCREEN,X
+                DEX
+                BPL HEAD0
+
+                LDA #LOLIGHT
+                STA CURBCOL             ;LOLIGHT TEXT
+                LDX #NROFPROGS-1        ;DO ALL PROGS
+HEAD1           JSR PRDISP              ;DISPLAY THEIR NAME
+                DEX                     ;ALL DONE?
+                BPL HEAD1               ;NO -> GO NEXT
+
+                RTS
+
+
+MOBDEF          BYTE MOBLEVEL0/64       ;PTR TO MOB VU=0
+                BYTE MOBLEVEL1/64       ;PTR TO MOB VU=1
+                BYTE MOBLEVEL2/64       ;PTR TO MOB VU=2
+                BYTE MOBLEVEL3/64       ;PTR TO MOB VU=3
+                BYTE MOBLEVEL4/64       ;PTR TO MOB VU=4
+                BYTE MOBLEVEL5/64       ;PTR TO MOB VU=5
+
+;               DATA TO DEFINE MOBS
+
+LEVEL0          BYTE %10001000,%10001000,%10000000
+LEVEL1          BYTE %01001000,%10001000,%10000000
+LEVEL2          BYTE %01000100,%10001000,%10000000
+LEVEL3          BYTE %01000100,%01001000,%10000000
+LEVEL4          BYTE %01000100,%01000100,%10000000
+LEVEL5          BYTE %01000100,%01000100,%11000000
+
+CH_COPYR        BYTE $3C,$42,$99,$A1,$A1,$99,$42,$3C
+CH_VU0          BYTE $00,$00,$00,$08,$10,$00,$00,$00
+CH_VU1          BYTE $00,$00,$00,$18,$18,$00,$00,$00
+CH_VU2          BYTE $00,$00,$18,$3C,$3C,$18,$00,$00
+CH_VU3          BYTE $00,$38,$7C,$7C,$7C,$38,$00,$00
+CH_VU4          BYTE $00,$3C,$7E,$7E,$7E,$7E,$3C,$00
+CH_VU5          BYTE $7C,$FE,$FE,$FE,$FE,$FE,$7C,$00
+
+HEADER          FCS " SEE THE LIGHT   VU        @C VD HOOVEN "
+
+
+;*****************************************************************************
+;
+;       NEWNMI          18/10/90
+;
+;       The new NMI dispatcher.
+;       Find out what caused the NMI, then handle it by
+;       calling the right handler. 
+;
+;       input:          none
+;       output:         none
+;       regs affected:  none
+;
+;*****************************************************************************
+  
+NEWNMI          PHA
+                TYA
+                PHA
+                TXA
+                PHA                     ;SAVE REGS
+
+                LDA ICR2                ;GET CIA STATUS
+                PHA                     ;SAVE STATUS 
+                AND #TBNMI              ;TIMER B NMI?
+                BEQ NE1                 ;NO -> JUMP  OVER
+                JSR TB                  ;HANDLE TIMER B NMI
+                JMP NEEXIT              ;EXIT DISPATCHER
+
+NE1             PLA                     ;GET SAVED STATUS
+                PHA                     ;LEAVE IT ON STACK
+                AND #FLAGNMI            ;FLAG NMI?
+                BEQ NE2                 ;NO -> JUMP OVER
+                JSR FLAG                ;HANDLE FLAG NMI
+                JMP NEEXIT              ;EXIT DISPATCHER
+
+NE2             LDA #"R"                ;RESTORE KEY PRESSED
+                JSR $FFD2               ;DISPLAY R
+
+NEEXIT          PLA                     ;REMOVE STATUS 
+                PLA                     ;RESTORE REGS
+                TAX
+                PLA
+                TAY
+                PLA
+                RTI
+
+;*****************************************************************************
+;
+;       NEWNMIRUN       15/10/90
+;
+;       Test wheter our NMI is running or not. 
+;
+;       input:          none
+;       output:         C=1 our NMI, C=0 not our NMI
+;       regs affected:  CCR
+;
+;*****************************************************************************
+
+NEWNMIRUN       PHA                     ;SAVE A
+                CLC                     ;ASSUME NOT RUNNING
+                LDA NMIVEC              ;GET NMI VECTOR.LOW
+                CMP #}NEWNMI            ;IS IT OUR VECTOR?
+                BNE RUN1                ;NO -> EXIT
+                LDA NMIVEC+1            ;GET NMI VECTOR.HIGH
+                CMP #{NEWNMI            ;IS IT OUR VECTOR?
+                BNE RUN1                ;NO -> EXIT
+                SEC                     ;FLAG RUNNING
+RUN1            PLA                     ;GET A
+                RTS                     ;RETURN
+
+;*****************************************************************************
+;
+;       FLAG            15/10/90
+;
+;       FLAG INTERRUPT handler. 
+;       Disables FLAG, starts timer B, enables TB NMI.
+;       Then call TB handler to transmit first data.
+;
+;       input:          none
+;       output:         none
+;       regs affected:  all
+;
+;*****************************************************************************
+     
+FLAG            LDA #STARTTB
+                STA CRB2                ;START TIMER B
+                LDA #DISABLEFLAG
+                STA ICR2                ;DISABLE FLAG NMI
+                LDA #ENABLETB
+                STA ICR2                ;ENABLE TB NMI
+                LDA #0
+                STA SLICECNT            ;INITIALIZE SLICECNT;
+ 
+                JSR TB                  ;DO FIRST SLICE
+
+                RTS
+
+;*****************************************************************************
+;
+;       TB              15/10/90
+;
+;       TIMER INTERRUPT handler.
+;       Check SLICEnumber, transmit data, adjust SLICEnumber
+;
+;       If last SLICE then disable TB NMI and enable FLAG NMI.
+;       If it is time to update the BITMAP then NEXTBMP is
+;       copyed to CURBMP, and a new NEXTBMP is generated.
+;
+;       This routine also decrements the DELAYCNT counter every
+;       20 ms.
+;
+;       input:          none
+;       output:         none
+;       regs affected:  all
+;
+;*****************************************************************************
+
+
+ROWTOSEND       BYTE $FF,$FF,12,8,4,0,$80,16,$FF,$FF
+                BYTE $FF,$FF,12,8,4,0,$80,16,$FF,$FF
+
+;               $FF = DO NOTHING
+;               $80 = SYNC FOR NEW PATTERN
+;               $0X = ROW TO SEND 
+
+LASTSLTOSEND    EQU 17                  ;LAST SLICE TO SEND DATA 
+
+TB              LDY SLICECNT            ;GET SLICENUMBER
+                LDX ROWTOSEND,Y         ;GET OFFSET FIRST BYTE TO SEND
+
+                BMI TB3                 ;EXIT IF THIS IS A DO-NOTHING SLICE
+
+;               SEND SERIAL DATA
+
+                LDY #4                  ;Y=LOOPCOUNTER
+                SEC                     ;DON'T WAIT FOR SDR2 EMPTY
+TB2             LDA CURRENTBMP,X        ;GET DATA TO TRANSMIT
+                JSR DATOUT              ;TRANSMIT IT
+                INX                     ;POINT TO NEXT DATAFIELD
+                DEY                     ;ALL DONE?
+                BNE TB2                 ;NO -> GO LOOP
+
+TB3             LDA SLICECNT          
+                CMP #LASTSLTOSEND       ;WAS THIS THE LAST SLICE?
+                BNE TBEXIT              ;NO -> WE ARE READY
+
+                LDA #STOPTB             ;YES-> STOP GENERATING TIMER B NMI'S
+                STA CRB2                ;SWITCH OFF TIMER B
+                LDA #DISABLETB 
+                STA ICR2                ;DON'T ALLOW TB NMI'S
+                LDA #ENABLEFLAG
+                STA ICR2                ;ENABLE FLAG NMI'S
+
+                DEC DELAYCNT            ;UPDATE DELAYCOUNTER
+
+TBEXIT          INC SLICECNT            ;ADJUST SLICECNT FOR NEXT SLICE
+
+                LDX SLICECNT            ;GET SLICENR
+                LDA ROWTOSEND,X         ;GET SLICETYPE
+                CMP #$80                ;SYNC SLICE?
+                BNE TBRTS               ;NO ->EXIT
+
+;               NOW COPY NEXT BITMAP TO CURRENT
+
+                LDX #BITMAPSIZE-1       ;GET BITMAPSIZE
+TB4             LDA NEXTBMP,X
+                STA CURRENTBMP,X        ;COPY BYTE
+                DEX                     ;ALL DONE?
+                BPL TB4                 ;NO -> DO NEXT
+                JSR SETLAMP             ;CREATE NEXT BITMAP
+               
+TBRTS           RTS
+
+
+;*****************************************************************************
+;
+;       DATOUT                          (not re-entrant!)
+;
+;       Transmit the serial data as fast as possible.
+;       This routine polls the CIA to check for SDR empty.
+;
+;       input:          A=data
+;                       C=1 don't check SDR empty
+;                         0 wait for SDR empty
+;       output:         C=0
+;       regs affected:  CCR
+;
+;*****************************************************************************
+
+DATOUT          BCS DA2                 ;WAIT FOR SDR EMPTY? NO -> JUMP
+                STX TEMPDATOUT          ;SAVE X
+                TAX                     ;SAVE DATA
+                LDA #%00001000          ;SDR EMPTY TEST BIT
+DA1             BIT ICR2                ;SDR EMPTY?
+                BEQ DA1                 ;NO -> WAIT
+                STX SDR2                ;TRANSMIT DATA
+                TXA                     ;RESTORE DATA
+                LDX TEMPDATOUT          ;RESTORE X
+                JMP DA3                 ;EXIT
+DA2             STA SDR2                ;TRANSMIT IT
+DA3             CLC                     ;NEXT TIME WAIT FOR SDR EMPTY
+                RTS
+
+;*****************************************************************************
+;
+;       TOBITMAP        19/10/90        
+;
+;       Used to update the lampbitmap for one lamp.
+;       This routine should not affect the X register, because
+;       it is used as the loopcounter in the calling routine.
+;
+;       Tables were used to speed things up.  5/4/91
+;
+;       input:          A=lampcode
+;                       X=lampnumber
+;       output:         corresponding bit in bitmap set
+;       regs affected:  A,Y,CCR
+;
+;*****************************************************************************
+
+
+TOBITMAP        TAY                     ;Y = LAMPCODE (0..5)
+                LDA ROWOFS,Y            ;GET ROW OFSET
+                ORA BYTENR,X            ;ADD BYTE 
+                TAY                     ;Y = BYTENR IN BITMAP
+                LDA BITPOS,X            ;GET BIT TO SET
+                ORA NEXTBMP,Y           ;
+                STA NEXTBMP,Y           ;SET BIT
+                RTS                     ;RETURN
+
+ROWOFS          BYTE 20,0,4,8,12,16
+BYTENR          BYTE 0,0,0,0,0,0,0,0
+                BYTE 1,1,1,1,1,1,1,1
+                BYTE 2,2,2,2,2,2,2,2
+                BYTE 3,3,3,3,3,3,3,3
+BITPOS          BYTE 128,64,32,16,8,4,2,1
+                BYTE 128,64,32,16,8,4,2,1
+                BYTE 128,64,32,16,8,4,2,1
+                BYTE 128,64,32,16,8,4,2,1
+
+
+;*****************************************************************************
+;
+;       SETNEW          18/10/90
+;
+;       create a new lamp pattern.
+;
+;       input:          X reg = pointer to packed lamp data LOW
+;                       Y reg = pointer to packed lamd data HIGH
+;       output:         LAMPCODES table
+;       regs affectes:  all
+;
+;*****************************************************************************
+
+SETNEW          SEI                     ;DISABLE INT'S
+
+                STX LMPPTR              ;STORE POINTER LOW
+                STY LMPPTR+1            ;STORE POINTER HIGH
+
+                LDY #NROFDATABYTES-1    ;DO ALL DATABYTES
+                LDX #0                  ;DO ALL LAM
+
+EXP1            LDA (LMPPTR),Y          ;GET A DATABYTE
+                AND #%00001111          ;GET LOW NIBBLE
+                STA LAMPCODES,X         ;STORE IN TABLE
+                INX                     ;POINT TO NEXT CODEFIELD
+
+                LDA (LMPPTR),Y          ;GET SAME DATABYTE
+                LSR A
+                LSR A
+                LSR A
+                LSR A                   ;NOW GET HIGH NIBBLE
+                STA LAMPCODES,X         ;STORE IN TABLE
+                INX                     ;POINT TO NEXT CODEFIELD
+
+                DEY                     ;LAST BYTE?
+                BPL EXP1                ;NO -> GO LOOP
+
+                CLI                     ;ALLOW INT'S
+                RTS                     ;READY
+
+;*****************************************************************************
+;
+;       SETLAMP         18/10/90
+;
+;       Routine to build the NEXTBMP from the LAMPCODES table
+;       and simulate the lamps on screen.
+;
+;       input:          LAMPCODES table
+;       output:         CURRENTBMP, screensimulation
+;       regs affected:  all
+;
+;*****************************************************************************
+
+ADTOVU          BYTE 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0    ;0  ..15
+                BYTE 0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0    ;16 ..31
+                BYTE 0,0,0,0,0,0,0,0,0,0,1,1,2,2,2,3    ;32 ..47
+                BYTE 3,3,3,3,3,3,4,4,4,4,4,4,4,4,4,4    ;48 ..63
+                BYTE 4,4,4,4,5,5,5,5,5,5,5,5,5,5,5,5    ;64 ..79
+                BYTE 5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5    ;80 ..95
+                BYTE 5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5    ;96 ..111
+                BYTE 5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5    ;112..127
+                BYTE 5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5    ;128..143
+                BYTE 5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5    ;144..159
+                BYTE 5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5    ;160..175
+                BYTE 5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5    ;176..191
+                BYTE 5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5    ;192..207
+                BYTE 5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5    ;208..223
+                BYTE 5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5    ;224..239
+                BYTE 5,5,5,5,5,5,5,5,5,5,5,5,5,5,5,5    ;240..255
+
+;        LAMPCODE =  0 1 2 3 4 5 6 7 8 9 A B C D E F
+
+VUANDCODE       BYTE 0,1,2,3,4,5,1,5,1,0,0,0,0,1,1,0    ;VU 0   
+                BYTE 0,1,2,3,4,5,1,4,3,0,0,0,0,1,0,1    ;VU 1   
+                BYTE 0,1,2,3,4,5,2,3,3,3,0,0,0,1,1,0    ;VU 2   
+                BYTE 0,1,2,3,4,5,3,2,3,3,3,0,0,2,0,1    ;VU 3    
+                BYTE 0,1,2,3,4,5,4,1,3,3,3,3,0,2,1,0    ;VU 4   
+                BYTE 0,1,2,3,4,5,5,1,5,5,5,5,5,3,0,1    ;VU 5   
+
+SETLAMP         LDX #BITMAPSIZE-1       ;GET SIZE OF LAMP BITMAP
+                LDA #0                  ;FILL WITH ZERO'S
+SETL0           STA NEXTBMP,X           ;CLEAR A BYTE
+                DEX                     ;ALL DONE?
+                BPL SETL0               ;NO -> GO LOOP 
+                                                      
+                LDX ADCONV              ;GET VALUE
+                STX ADCONV              ;START NEW SAMPLE
+                LDA ADTOVU,X            ;CONVERT TO VU
+                TAX                     ;VU TO X
+
+                ASL A
+                ASL A
+                ASL A
+                ASL A                   ;VU * 16
+                STA VUVALUE             ;STORE VU*16 VALUE
+
+                LDA MOBDEF,X            ;GET POINTER TO VU PATTERN
+                STA MOBPTR              ;UPDATE VU DISPLAY
+
+                LDX #NROFLAMPS-1        ;DO ALL LAMPS
+SETL1           LDA LAMPCODES,X         ;GET LAMPCODE
+                ORA VUVALUE             ;ADD VU*16  ('OR' IS FASTER)
+                TAY
+                LDA VUANDCODE,Y         ;GET BRIGHTNESS
+                PHA                     ;SAVE FOR SIMULATOR
+                JSR TOBITMAP            ;SET BIT IN BITMAP
+                PLA
+                JSR SCREENSIM           ;DISPLAY ON SCREEN
+                DEX                     ;ALL DONE?
+                BPL SETL1               ;NO -> LOOP
+
+                RTS                     ;YES -> READY
+
+
+
+;*****************************************************************************
+;
+;       SCREENSIM
+;
+;       input:          A=lampcode
+;                       X=lampnumber
+;       output:         corresponding lamp on screen is updated.
+;       regs affected:  A,Y,CCR
+;
+;*****************************************************************************
+
+SCRNCODES       BYTE 58,59,60,61,62,63
+
+PLACEONSCR      WORD NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL ;SCREEN ADRESSES
+                WORD NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL
+                WORD NULL,NULL,NULL,NULL,NULL,NULL,NULL,NULL
+                WORD 1568,1644,1560,1398,1240,1164,1248,1410
+
+SCREENSIM       PHA                     ;SAVE BRIGHTNESS
+                TXA                     ;GET LAMPNUMBER
+                ASL A                   ;MUL 2
+                TAY                     ;Y = INDEX TO PLACE ON SCREEN TABLE
+                LDA PLACEONSCR,Y
+                STA SCRNPTR  
+                LDA PLACEONSCR+1,Y
+                STA SCRNPTR+1           ;COPY POINTER TO ZERO-PAGE
+                PLA                     ;GET BRIGHTNESS
+                TAY
+                LDA SCRNCODES,Y         ;GET BRIGHTNESS CHARACTER
+                LDY #0                  ;OFFSET 0
+                STA (SCRNPTR),Y         ;WRITE TO SCREEN
+                RTS                     ;READY
+
+;*****************************************************************************
+;
+;       DELAY20MS
+;
+;       Pauses the program for A*20ms, if the lampdriver is running. 
+;       If the timer is not running this routine returns without delay.
+;
+;       input:          A=delay time in 20ms steps
+;       output:         none
+;       reg affected:   A
+;
+;*****************************************************************************
+
+DELAY20MS       PHP                     ;SAVE CCR
+                JSR NEWNMIRUN           ;IS THE TIMER RUNNING?
+                BCC DELEXIT             ;NO -> EXIT
+                STA DELAYCNT            ;STORE DELAYTIME IN COUNTER
+DEL1            LDA DELAYCNT            ;IS IT ZERO?
+                BNE DEL1                ;NO -> WAIT
+DELEXIT         PLP                     ;GET CCR
+                RTS                     ;YES -> RETURN
+
+;*****************************************************************************
+;
+;       DELAY1S
+;
+;       Pauses the program for A*1s, if the lampdriver is running. 
+;       If the timer is not running this routine returns without delay.
+;
+;       input:          A=delay time in SECONDS
+;       output:         none
+;       reg affected:   A
+;
+;*****************************************************************************
+
+DELAY1S         PHP                     ;SAVE CCR
+DS1             PHA
+                LDA #50
+                JSR DELAY20MS           ;DELAY 1 SECOND
+                PLA
+                SEC
+                SBC #1                  ;DONE?
+                BNE DS1                 ;NO -> LOOP
+                PLP                     ;GET CCR
+                RTS                                    
+
+
+;*****************************************************************************
+
+
+
+
+;*****************************************************************************
+;
+;       DEMO PROGRAM  
+;
+;*****************************************************************************
+        
+LMPDAT0         BYTE $BC,$BA,$98,$9A
+
+LMPDAT05        BYTE $77,$71,$66,$61
+
+
+
+LMPDAT1         BYTE $46,$66,$66,$66
+LMPDAT2         BYTE $64,$66,$66,$64
+LMPDAT3         BYTE $66,$46,$66,$46
+LMPDAT4         BYTE $66,$64,$64,$66
+LMPDAT5         BYTE $66,$66,$46,$66
+LMPDAT6         BYTE $66,$64,$64,$66
+LMPDAT7         BYTE $66,$46,$66,$46
+LMPDAT8         BYTE $64,$66,$66,$64
+
+LMPDAT9         BYTE $FE,$FE,$FE,$FE
+
+LMPDATA         BYTE $DD,$DD,$DD,$DD
+
+ALLOFF          BYTE 0,0,0,0
+ALLDIM          BYTE $11,$11,$11,$11
+
+
+ONE             BYTE $50,$00,$00,$00
+TWO             BYTE $05,$00,$00,$00
+THREE           BYTE $00,$50,$00,$00
+FOUR            BYTE $00,$05,$00,$00
+FIVE            BYTE $00,$00,$50,$00
+SIX             BYTE $00,$00,$05,$00
+SEVEN           BYTE $00,$00,$00,$50
+EIGHT           BYTE $00,$00,$00,$05
+
+
+SPEED           EQU 6
+
+START           JSR INITVDU
+                JSR INITSRQ
+                JSR INITNMI 
+                LDA #0
+                STA CURPROG
+                JMP PRSTART0
+
+;*****************************************************************************
+
+PRSTART0        LDX #}ALLDIM
+                LDY #{ALLDIM     
+                JSR SETNEW
+HANG            JMP HANG
+
+;*****************************************************************************
+
+PRSTART1        LDX #}ALLOFF
+                LDY #{ALLOFF     
+                JSR SETNEW
+                JMP HANG
+
+;*****************************************************************************
+
+PRSTART2        LDX #}ONE
+                LDY #{ONE     
+                JSR SETNEW
+                LDA #6 
+                JSR DELAY20MS
+
+                LDX #}TWO     
+                LDY #{TWO     
+                JSR SETNEW
+                LDA #6 
+                JSR DELAY20MS
+
+                LDX #}THREE    
+                LDY #{THREE    
+                JSR SETNEW
+                LDA #6 
+                JSR DELAY20MS
+
+                LDX #}FOUR    
+                LDY #{FOUR    
+                JSR SETNEW
+                LDA #6 
+                JSR DELAY20MS
+
+                LDX #}FIVE    
+                LDY #{FIVE     
+                JSR SETNEW
+                LDA #6 
+                JSR DELAY20MS
+
+                LDX #}SIX     
+                LDY #{SIX      
+                JSR SETNEW
+                LDA #6 
+                JSR DELAY20MS
+
+                LDX #}SEVEN  
+                LDY #{SEVEN  
+                JSR SETNEW
+                LDA #6 
+                JSR DELAY20MS
+
+                LDX #}EIGHT   
+                LDY #{EIGHT    
+                JSR SETNEW
+                LDA #6 
+                JSR DELAY20MS
+
+                JMP PRSTART2
+
+;*****************************************************************************
+
+
+
+PRSTART2        LDX #}LMPDAT0
+                LDY #{LMPDAT0
+                JSR SETNEW
+                LDA #250 
+                JSR DELAY20MS
+
+                LDX #}LMPDAT9
+                LDY #{LMPDAT9
+                JSR SETNEW
+                LDA #10  
+                JSR DELAY1S
+
+                LDX #}LMPDAT05
+                LDY #{LMPDAT05
+                JSR SETNEW
+                LDA #10  
+                JSR DELAY1S
+
+                LDX #}LMPDATA
+                LDY #{LMPDATA
+                JSR SETNEW
+                LDA #10  
+                JSR DELAY1S
+
+                JMP PRSTART2
+
+
+PRSTART5        LDX #}LMPDAT1
+                LDY #{LMPDAT1
+                JSR SETNEW
+                LDA #SPEED
+                JSR DELAY20MS
+
+                LDX #}LMPDAT2
+                LDY #{LMPDAT2
+                JSR SETNEW
+                LDA #SPEED
+                JSR DELAY20MS
+
+                LDX #}LMPDAT3
+                LDY #{LMPDAT3
+                JSR SETNEW
+                LDA #SPEED
+                JSR DELAY20MS
+
+                LDX #}LMPDAT4
+                LDY #{LMPDAT4
+                JSR SETNEW
+                LDA #SPEED
+                JSR DELAY20MS
+
+                LDX #}LMPDAT5
+                LDY #{LMPDAT5
+                JSR SETNEW
+                LDA #SPEED
+                JSR DELAY20MS
+
+                LDX #}LMPDAT6
+                LDY #{LMPDAT6
+                JSR SETNEW
+                LDA #SPEED
+                JSR DELAY20MS
+
+                LDX #}LMPDAT7
+                LDY #{LMPDAT7
+                JSR SETNEW
+                LDA #SPEED
+                JSR DELAY20MS
+
+                LDX #}LMPDAT8
+                LDY #{LMPDAT8
+                JSR SETNEW
+                LDA #SPEED
+                JSR DELAY20MS
+
+                JMP PRSTART5          ;RUN FOREVER
+
+PRSTART4        LDX #}FIVE
+                LDY #{FIVE
+                JSR SETNEW
+                LDA #2
+                JSR DELAY20MS
+
+                LDX #}ALLOFF
+                LDY #{ALLOFF
+                JSR SETNEW
+                LDA #4
+                JSR DELAY20MS
+
+                LDX #}TWO     
+                LDY #{TWO     
+                JSR SETNEW
+                LDA #2 
+                JSR DELAY20MS
+
+                LDX #}ALLOFF
+                LDY #{ALLOFF
+                JSR SETNEW
+                LDA #4
+                JSR DELAY20MS
+
+                LDX #}ONE     
+                LDY #{ONE     
+                JSR SETNEW
+                LDA #2 
+                JSR DELAY20MS
+
+                LDX #}ALLOFF
+                LDY #{ALLOFF
+                JSR SETNEW
+                LDA #4
+                JSR DELAY20MS
+
+                LDX #}SIX     
+                LDY #{SIX      
+                JSR SETNEW
+                LDA #2 
+                JSR DELAY20MS
+
+                LDX #}ALLOFF
+                LDY #{ALLOFF
+                JSR SETNEW
+                LDA #4
+                JSR DELAY20MS
+
+                LDX #}SEVEN  
+                LDY #{SEVEN  
+                JSR SETNEW
+                LDA #2 
+                JSR DELAY20MS
+
+                LDX #}ALLOFF
+                LDY #{ALLOFF
+                JSR SETNEW
+                LDA #4
+                JSR DELAY20MS
+
+                LDX #}FOUR    
+                LDY #{FOUR    
+                JSR SETNEW
+                LDA #2 
+                JSR DELAY20MS
+
+                LDX #}ALLOFF
+                LDY #{ALLOFF
+                JSR SETNEW
+                LDA #4
+                JSR DELAY20MS
+
+                LDX #}EIGHT   
+                LDY #{EIGHT    
+                JSR SETNEW
+                LDA #2 
+                JSR DELAY20MS
+
+                LDX #}ALLOFF
+                LDY #{ALLOFF
+                JSR SETNEW
+                LDA #4
+                JSR DELAY20MS
+
+                LDX #}THREE    
+                LDY #{THREE    
+                JSR SETNEW
+                LDA #2 
+                JSR DELAY20MS
+
+                LDX #}ALLOFF
+                LDY #{ALLOFF
+                JSR SETNEW
+                LDA #4
+                JSR DELAY20MS
+
+                LDX #}SIX     
+                LDY #{SIX      
+                JSR SETNEW
+                LDA #2 
+                JSR DELAY20MS
+
+                LDX #}ALLOFF
+                LDY #{ALLOFF
+                JSR SETNEW
+                LDA #4
+                JSR DELAY20MS
+
+                LDX #}FIVE
+                LDY #{FIVE
+                JSR SETNEW
+                LDA #2
+                JSR DELAY20MS
+
+                LDX #}ALLOFF
+                LDY #{ALLOFF
+                JSR SETNEW
+                LDA #4
+                JSR DELAY20MS
+
+                LDX #}THREE    
+                LDY #{THREE    
+                JSR SETNEW
+                LDA #2 
+                JSR DELAY20MS
+
+                LDX #}ALLOFF
+                LDY #{ALLOFF
+                JSR SETNEW
+                LDA #4
+                JSR DELAY20MS
+
+                LDX #}ONE     
+                LDY #{ONE     
+                JSR SETNEW
+                LDA #2 
+                JSR DELAY20MS
+
+                LDX #}ALLOFF
+                LDY #{ALLOFF
+                JSR SETNEW
+                LDA #4
+                JSR DELAY20MS
+
+                LDX #}TWO     
+                LDY #{TWO     
+                JSR SETNEW
+                LDA #2 
+                JSR DELAY20MS
+
+                LDX #}ALLOFF
+                LDY #{ALLOFF
+                JSR SETNEW
+                LDA #4
+                JSR DELAY20MS
+
+                LDX #}FOUR    
+                LDY #{FOUR    
+                JSR SETNEW
+                LDA #2 
+                JSR DELAY20MS
+
+                LDX #}ALLOFF
+                LDY #{ALLOFF
+                JSR SETNEW
+                LDA #4
+                JSR DELAY20MS
+
+                LDX #}EIGHT   
+                LDY #{EIGHT    
+                JSR SETNEW
+                LDA #2 
+                JSR DELAY20MS
+
+                LDX #}ALLOFF
+                LDY #{ALLOFF
+                JSR SETNEW
+                LDA #4
+                JSR DELAY20MS
+
+                LDX #}SEVEN  
+                LDY #{SEVEN  
+                JSR SETNEW
+                LDA #2 
+                JSR DELAY20MS
+
+                LDX #}ALLOFF
+                LDY #{ALLOFF
+                JSR SETNEW
+                LDA #4
+                JSR DELAY20MS
+
+                JMP PRSTART4
+
+                END.
+
+
+
+
+
+
+
+
+
+
+
+
+

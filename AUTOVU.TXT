@@ -1,0 +1,35 @@
+
+;*****************************************************************************
+;
+;       AUTOVU    
+;
+;       input:          A = vu value
+;       output:         vu is adjusted
+;       reg affected:   CCR
+;
+;*****************************************************************************
+
+AUTOVU          PHA                     ;SAVE DATA
+                CMP #32                 ;RECEIVING SIGNAL?
+                BMI AUTOEXIT            ;NO -> DON'T COUNT
+
+                CLC                     ;LO BYTE, NO CARRY
+                ADC VUTOTAL+1           ;ADD TO TOTAL
+                STA VUTOTAL+1
+                LDA #0
+                ADC VUTOTAL             ;ADD HIGH BYTE
+                STA VUTOTAL
+                INC VUCOUNT             ;256 SAMPLES DONE?
+                BNE AUTOEXIT            ;NO -> EXIT
+                LDA VUTOTAL             ;GET COARSE OVER 256 SAMPLES
+                STA VUCOARSE            ;SAVE IT
+
+                STA MOBX        ;MOVE VU METER ON SCREEN
+
+                LDA #0
+                STA VUTOTAL
+                STA VUTOTAL+1           ;INIT TOTAL VALUE
+AUTOEXIT        PLA                     ;RETREIVE DATA
+                RTS                     ;READY
+
+

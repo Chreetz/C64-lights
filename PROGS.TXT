@@ -1,0 +1,307 @@
+
+;*****************************************************************************
+;
+;       DEMO PROGRAM  
+;
+;*****************************************************************************
+        
+LMPDAT0         BYTE $AB,$CB,$A9,$89
+
+ALLOFF          BYTE 0,0,0,0
+ALLDIM          BYTE $11,$11,$11,$11
+ALLON           BYTE $55,$55,$55,$55
+
+P_001           BYTE $00,$30,$00,$00
+P_002           BYTE $00,$23,$00,$00
+
+P_003           BYTE $00,$12,$30,$00
+P_004           BYTE $00,$01,$23,$00
+P_005           BYTE $00,$00,$12,$30
+P_006           BYTE $00,$00,$01,$23
+P_007           BYTE $30,$00,$00,$12
+P_008           BYTE $23,$00,$00,$01
+P_009           BYTE $12,$30,$00,$00
+P_010           BYTE $01,$23,$00,$00
+
+P_011           BYTE $00,$12,$00,$00
+P_012           BYTE $00,$01,$00,$00
+
+P_013           BYTE $55,$55,$55,$55
+
+P_014           BYTE $E7,$E7,$E7,$E7
+P_015           BYTE $7E,$7E,$7E,$7E
+
+
+P2P0            BYTE $66,$66,$FF,$FF
+P2P1            BYTE $66,$FF,$66,$FF
+P2P2            BYTE $01,$23,$43,$21
+
+P3P0            BYTE $DD,$D0,$0D,$DD
+P3P1            BYTE $DD,$0D,$D0,$DD
+P3P2            BYTE $D0,$DD,$DD,$0D
+P3P3            BYTE $0D,$DD,$DD,$D0
+
+P4P0            BYTE $DD,$DD,$DD,$DD
+
+P5P1            BYTE $E6,$66,$66,$66
+P5P2            BYTE $6E,$66,$66,$6E
+P5P3            BYTE $66,$E6,$66,$E6
+P5P4            BYTE $66,$6E,$6E,$66
+P5P5            BYTE $66,$66,$E6,$66
+
+P7P0            BYTE $21,$21,$21,$21
+
+SPEED           EQU 6
+
+
+;*****************************************************************************
+
+PRSTART0        LDX #}ALLDIM
+                LDY #{ALLDIM     
+                JSR SETNEW
+HANG            JMP HANG
+
+;*****************************************************************************
+
+PRSTART1        LDX #}ALLOFF
+                LDY #{ALLOFF     
+                JSR SETNEW
+                JMP HANG
+
+;*****************************************************************************
+
+PRSTART2        LDX #}P2P0
+                LDY #{P2P0     
+                JSR SETNEW
+                LDA #3
+                LDX #255
+                JSR ROTCW
+                LDA #3
+                LDX #255
+                JSR ROTCCW
+        
+                LDX #}P2P1
+                LDY #{P2P1     
+                JSR SETNEW
+                LDA #3
+                LDX #255
+                JSR ROTCW
+                LDA #3
+                LDX #255
+                JSR ROTCCW
+
+                LDX #}P2P2
+                LDY #{P2P2
+                JSR SETNEW
+                LDA #1
+                LDX #128 
+                JSR ROTCCW
+
+                JMP PRSTART2
+
+;*****************************************************************************
+
+;               SOFT
+
+PRSTART3        LDX #}P3P0
+                LDY #{P3P0
+                JSR SETNEW
+                JSR PR3SUB0
+
+                LDX #}P3P1
+                LDY #{P3P1
+                JSR SETNEW
+                JSR PR3SUB0
+
+                LDX #}P3P2
+                LDY #{P3P2
+                JSR SETNEW
+                JSR PR3SUB0
+
+                LDX #}P3P3
+                LDY #{P3P3
+                JSR SETNEW
+                JSR PR3SUB0
+
+                LDX #}P3P2
+                LDY #{P3P2
+                JSR SETNEW
+                JSR PR3SUB0
+
+                LDX #}P3P1
+                LDY #{P3P1
+                JSR SETNEW
+                JSR PR3SUB0
+
+                JMP PRSTART3
+
+PR3SUB0         LDA #25
+                JSR DELAY20MS
+                LDA #10
+                LDX #8  
+                JSR ROTCW
+                LDA #25
+                JSR DELAY20MS
+                RTS
+
+;*****************************************************************************
+
+;               HOUSE
+
+PRSTART4        LDA #40
+                STA VAR1
+
+P4L2            LDX #}P4P0             ;ALLOFF
+                LDY #{P4P0             ;ALLOFF
+                JSR SETNEW
+                LDA #4
+                JSR DELAY20MS
+
+P4L0            BIT NEWPAT
+                BMI P4L0                ;WAIT FOR PATTERN SYNC
+                LDA RNDNUM              ;GET RANDOM NUMBER
+                AND #7                  ;0  THRU 7
+                ORA #%00011000          ;24 THRU 31
+                TAX
+                LDA #5                  ;MAX BRIGHTNESS
+                STA NEXTLMP,X
+                LDA #$FF
+                STA NEWPAT              ;FLAG NEW PATTERN
+                LDA #2
+                JSR DELAY20MS           ;WAIT
+
+                DEC VAR1                ;READY FLASHING?
+                BNE P4L2                ;NO -> FLASH AGAIN
+
+                LDX #}ALLON
+                LDY #{ALLON
+                JSR SETNEW              ;FLASH ALL LAMPS
+
+                LDA #$FF
+                STA VAR1
+
+P4L1            BIT NEWPAT
+                BMI P4L1                ;WAIT FOR PATTERN SYNC
+                LDA RNDNUM              ;GET RANDOM NUMBER
+                AND #7                  ;0  THRU 7
+                ORA #%00011000          ;24 THRU 31
+                TAX
+                LDA RNDNUM              ;GET RANDOM BRIGHT
+                AND #3                  ;0 THRU 3
+                CLC
+                ADC #9                  ;9 THRU C
+                STA NEXTLMP,X
+                LDA #$FF
+                STA NEWPAT              ;FLAG NEW PATTERN
+                LDA #1
+                JSR DELAY20MS           ;WAIT A SHORT TIME
+
+                DEC VAR1                ;READY?
+                BNE P4L1                ;NO -> AGAIN
+
+                LDX #}ALLON
+                LDY #{ALLON
+                JSR SETNEW              ;FLASH ALL LAMPS
+
+                JMP PRSTART4
+
+;*****************************************************************************
+
+PRSTART5        LDX #}P5P1
+                LDY #{P5P1
+                JSR SETNEW
+                LDA #SPEED
+                JSR DELAY20MS
+
+                LDX #}P5P2
+                LDY #{P5P2
+                JSR SETNEW
+                LDA #SPEED
+                JSR DELAY20MS
+
+                LDX #}P5P3
+                LDY #{P5P3
+                JSR SETNEW
+                LDA #SPEED
+                JSR DELAY20MS
+
+                LDX #}P5P4
+                LDY #{P5P4
+                JSR SETNEW
+                LDA #SPEED
+                JSR DELAY20MS
+
+                LDX #}P5P5
+                LDY #{P5P5
+                JSR SETNEW
+                LDA #SPEED
+                JSR DELAY20MS
+
+                LDX #}P5P4
+                LDY #{P5P4
+                JSR SETNEW
+                LDA #SPEED
+                JSR DELAY20MS
+
+                LDX #}P5P3
+                LDY #{P5P3
+                JSR SETNEW
+                LDA #SPEED
+                JSR DELAY20MS
+
+                LDX #}P5P2
+                LDY #{P5P2
+                JSR SETNEW
+                LDA #SPEED
+                JSR DELAY20MS
+
+                JMP PRSTART5          ;RUN FOREVER
+;*****************************************************************************
+
+PRSTART6        LDX #}LMPDAT0
+                LDY #{LMPDAT0
+                JSR SETNEW
+                JMP HANG
+
+
+;*****************************************************************************
+
+PRSTART7        LDX #}P7P0
+                LDY #{P7P0
+                JSR SETNEW
+                
+P7L0            BIT NEWPAT
+                BMI P7L0                ;WAIT FOR PATTERN SYNC
+                LDA RNDNUM              ;GET RANDOM NUMBER
+                AND #7                  ;0  THRU 7
+                ORA #%00011000          ;24 THRU 31
+                TAX
+                LDA RNDNUM              ;GET RANDOM BRIGHT
+                AND #3                  ;0 THRU 3
+                STA NEXTLMP,X
+                LDA #$FF
+                STA NEWPAT              ;FLAG NEW PATTERN
+
+                LDA RNDNUM              ;GET RANDOM TIMEDELAY
+                AND #15                 ;0 THRU 15
+                JSR DELAY20MS           ;WAIT
+
+                JMP P7L0
+
+
+;*****************************************************************************
+
+                END.
+
+
+
+
+
+
+
+
+
+
+
+
+
